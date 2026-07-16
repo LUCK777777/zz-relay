@@ -164,9 +164,16 @@ prepare_source_tree() {
 has_233boy_installation() {
   command -v sb >/dev/null 2>&1 && return 0
   [[ -x /usr/local/bin/sb ]] && return 0
+  [[ -d /etc/sing-box/sh && -d /etc/sing-box/conf ]] && return 0
 
-  # 已有 233boy 风格配置时采取保守策略，避免覆盖现有 sing-box 环境。
-  [[ -d /etc/sing-box && -d /etc/sing-box/conf ]] && return 0
+  return 1
+}
+
+has_existing_sing_box_environment() {
+  [[ -e /etc/sing-box/config.json ]] && return 0
+  [[ -x /etc/sing-box/bin/sing-box ]] && return 0
+  [[ -x /usr/local/bin/sing-box ]] && return 0
+  [[ -d /etc/sing-box ]] && return 0
 
   return 1
 }
@@ -181,11 +188,15 @@ install_233boy_if_needed() {
   fi
 
   if has_233boy_installation; then
-    log "已检测到 233boy/sing-box 环境，跳过上游安装，不覆盖现有脚本和配置"
+    log "已检测到 233boy 环境，跳过上游安装，不覆盖现有脚本和配置"
     return
   fi
 
-  log "未检测到 233boy，下载官方安装脚本"
+  if has_existing_sing_box_environment; then
+    die "检测到已有的非 233boy sing-box 环境。为防止覆盖 /etc/sing-box/config.json，已停止自动安装 233boy；请先备份并迁移原节点"
+  fi
+
+  log "未检测到 233boy 或其他 sing-box 环境，下载官方安装脚本"
   download_file "$UPSTREAM_233BOY_INSTALL_URL" "$upstream_installer"
   [[ -s "$upstream_installer" ]] || die "233boy 官方安装脚本下载结果为空"
   bash -n "$upstream_installer" || die "233boy 官方安装脚本语法检查失败"

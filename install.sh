@@ -173,6 +173,7 @@ has_233boy_installation() {
 
 install_233boy_if_needed() {
   local upstream_installer="$TEMP_DIR/233boy-install.sh"
+  local upstream_status=0
 
   if [[ $ZZ_ONLY -eq 1 ]]; then
     log "已使用 --zz-only，跳过 233boy 安装"
@@ -190,10 +191,21 @@ install_233boy_if_needed() {
   bash -n "$upstream_installer" || die "233boy 官方安装脚本语法检查失败"
 
   log "开始原样执行 233boy 官方安装脚本（zz 不会修改该脚本）"
-  if ! bash "$upstream_installer"; then
-    die "233boy 官方安装脚本执行失败，已停止安装 zz"
+  if bash "$upstream_installer"; then
+    log "233boy 官方安装脚本执行完成"
+    return
+  else
+    upstream_status=$?
   fi
-  log "233boy 官方安装脚本执行完成"
+
+  # 233boy 安装器在部分成功安装场景会返回非零状态。
+  # 以实际安装结果为准，避免 sing-box 已可用但 zz 被误停。
+  if has_233boy_installation; then
+    log "警告: 233boy 官方脚本返回状态码 ${upstream_status}，但已检测到安装结果，继续安装 zz"
+    return
+  fi
+
+  die "233boy 官方安装脚本返回状态码 ${upstream_status}，且未检测到安装结果，已停止安装 zz"
 }
 
 copy_project_files() {

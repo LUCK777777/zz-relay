@@ -1,5 +1,7 @@
 # zz-relay
 
+当前版本：`0.1.1`
+
 `zz-relay`（命令名：`zz`）是一个独立的 sing-box 中转管理工具，面向使用 233boy sing-box 一键脚本的 Debian 服务器。
 
 它不会修改或替换 233boy 的 `sb` 脚本。`sb` 继续负责节点管理，`zz` 负责把入口节点绑定到落地出站。
@@ -54,7 +56,29 @@ zz-relay/
 - `iproute2`（提供 `ss`）
 - systemd
 
-`install.sh` 会在 Debian 上通过 `apt-get` 安装缺少的 `jq`、`python3` 和 `iproute2`。
+`install.sh` 会在 Debian 上通过 `apt-get` 安装缺少的 `jq`、`python3` 和 `iproute2`。默认还会检测 233boy：未安装时下载并原样执行官方安装脚本，已安装时直接跳过。
+
+## 统一安装行为
+
+默认安装器会按以下顺序执行：
+
+1. 检测服务器是否已有 `sb` 或 233boy 风格的 sing-box 配置。
+2. 如果没有，下载并原样执行 `233boy/sing-box` 官方 `install.sh`。
+3. 如果已有，跳过 233boy，不覆盖、不重装、不修改原脚本。
+4. 安装 `zz` 到独立目录。
+5. 安装完成后只显示操作提示，**不会自动启动 `zz`**。
+
+233boy 官方安装入口：
+
+```text
+https://raw.githubusercontent.com/233boy/sing-box/main/install.sh
+```
+
+如果只想安装 `zz`，明确跳过 233boy：
+
+```bash
+sudo bash install.sh --zz-only
+```
 
 ## 本地安装
 
@@ -73,11 +97,19 @@ sudo bash install.sh
 /usr/local/lib/zz-relay/VERSION
 ```
 
-安装完成后运行：
+安装完成后不要直接配置中转，请先运行：
+
+```bash
+sb
+```
+
+使用 233boy 菜单创建 **VLESS WebSocket** 节点，创建完成后再运行：
 
 ```bash
 zz
 ```
+
+进入 `zz` 后先同步 233boy 节点，再配置中转。
 
 ## 远程安装
 
@@ -92,6 +124,14 @@ bash <(curl -fsSL https://raw.githubusercontent.com/LUCK777777/zz-relay/main/ins
 ```bash
 wget https://raw.githubusercontent.com/LUCK777777/zz-relay/main/install.sh
 sudo bash install.sh
+```
+
+这条命令会同时准备 233boy 官方安装脚本和 `zz` 项目文件；已有 233boy 时会自动跳过上游安装。
+
+只安装 `zz`：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/LUCK777777/zz-relay/main/install.sh) --zz-only
 ```
 
 需要安装其他分支时，可以下载对应分支的安装脚本，或者显式指定：

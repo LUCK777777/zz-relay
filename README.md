@@ -1,6 +1,6 @@
 # zz-relay
 
-当前版本：`0.1.3`
+当前版本：`0.1.4`
 
 `zz-relay`（命令名：`zz`）是一个独立的 sing-box 中转管理工具，面向使用 233boy sing-box 一键脚本的 Debian 服务器。
 
@@ -17,7 +17,7 @@
 - 当前落地：Shadowsocks
 - 配置文件：`/etc/sing-box/config.json`
 - 233boy 节点目录：`/etc/sing-box/conf/*.json`
-- sing-box 核心：`/etc/sing-box/bin/sing-box`
+- sing-box 核心：自动检测 `/etc/sing-box/bin/sing-box`、`/usr/local/bin/sing-box` 或 `PATH` 中的 `sing-box`
 - systemd 服务：`sing-box`
 
 ## 项目结构
@@ -193,7 +193,7 @@ sudo bash uninstall.sh
 
 - `ZZ_CONFIG`
 - `ZZ_CONF_DIR`
-- `ZZ_CORE`
+- `ZZ_CORE`（未设置时自动检测 sing-box 核心路径）
 - `ZZ_SING_BOX_SERVICE`
 - `ZZ_FINAL_CONFIG`
 - `ZZ_LIB_DIR`（只在入口旁没有 `lib/` 目录时使用）

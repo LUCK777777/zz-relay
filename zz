@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -e
+
+ZZ_SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ -d "$ZZ_SCRIPT_DIR/lib" ]]; then
+  ZZ_LIB_DIR="$ZZ_SCRIPT_DIR/lib"
+else
+  ZZ_LIB_DIR="${ZZ_LIB_DIR:-/usr/local/lib/zz-relay}"
+fi
+
+for module in utils backup node relay config menu; do
+  module_path="$ZZ_LIB_DIR/$module.sh"
+  if [[ ! -r "$module_path" ]]; then
+    echo "zz: 无法读取模块: $module_path" >&2
+    exit 1
+  fi
+  # shellcheck source=/dev/null
+  source "$module_path"
+done
+
+main_menu

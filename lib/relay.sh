@@ -157,6 +157,10 @@ p.write_text(json.dumps(data, indent=2, ensure_ascii=False))
 print(f"已添加并绑定: {inbound_tag} -> {out_tag}")
 PY2
   fi
+
+  echo
+  echo "SS 落地添加并绑定成功，正在自动检查配置并重启 sing-box..."
+  check_restart_save
 }
 
 bind_existing() {

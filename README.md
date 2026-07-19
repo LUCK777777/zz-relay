@@ -1,6 +1,6 @@
 # zz-relay
 
-当前版本：`0.1.5`
+当前版本：`0.1.6`
 
 `zz-relay`（命令名：`zz`）是一个独立的 sing-box 中转管理工具，面向使用 233boy sing-box 一键脚本的 Debian 服务器。
 
@@ -206,6 +206,10 @@ ZZ_CONF_DIR=/tmp/sing-box/conf \
 ./zz
 ```
 
+## 0.1.6 变更说明
+
+通过“添加 SS 落地并绑定到这个节点”成功写入出站和路由后，`zz` 会立即检查主配置与 conf 目录的真实合并结果，自动重启 sing-box，并确认服务保持运行。无需再手动选择一次“检查重启并保存”。
+
 ## 0.1.5 修复说明
 
 旧版本“同步 233boy 节点”会把 conf 目录中的入口复制到 `/etc/sing-box/config.json`。由于 233boy 服务同时加载主配置和 conf 目录，这会触发：
@@ -221,6 +225,7 @@ duplicate inbound tag: VLESS-REALITY-xxxx.json
 - 每次同步、添加、绑定或删除前，都会创建 `config.json.zz-bak-时间戳`。
 - 233boy 的入口继续保存在 `/etc/sing-box/conf/*.json`；主配置不保存这些 `inbounds`，避免 systemd 使用 `-c` 和 `-C` 时重复加载相同 tag。
 - “同步 233boy 节点”会扫描并验证 conf 目录、检查重复 tag，并清理主配置中旧版本误写入的 `inbounds`。
+- 添加新的 SS 落地并完成绑定后，会自动执行合并配置检查、重启 sing-box、确认服务状态并保存当前主配置。
 - “检查重启并保存”使用 `sing-box check -c /etc/sing-box/config.json -C /etc/sing-box/conf` 检查真实合并配置；通过并确认服务保持运行后，复制当前主配置到 `config.json.final-working-old-nodes`。
 - 当前版本保持原脚本行为，尚未实现“检查失败后自动恢复备份”。
 - 当前 `ss://` 导入能力保持原脚本解析方式，没有扩大链接格式兼容范围。

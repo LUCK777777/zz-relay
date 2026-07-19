@@ -3,19 +3,23 @@
 list_forwards() {
   echo "当前转发："
   jq -r '
-    (.route.rules // [])
-    | .[]
-    | select(.inbound and .outbound)
-    | "\(.inbound | join(","))  ->  \(.outbound)"
+    [
+      (.route.rules // [])[]
+      | select(.inbound != null and .outbound != null)
+    ] as $rules
+    | if ($rules | length) == 0 then
+        "当前没有转发规则。"
+      else
+        $rules[]
+        | (
+            .inbound
+            | if type == "array" then join(",") else tostring end
+          ) + "  ->  " + (.outbound | tostring)
+      end
   ' "$CONFIG"
 
   echo
-  echo "当前落地："
-  jq -r '
-    .outbounds[]?
-    | select(.type!="direct")
-    | "\(.tag)  \(.type)  \(.server // "-"):\(.server_port // "-")"
-  ' "$CONFIG"
+  echo "说明：这里只显示实际绑定的转发；未绑定的 SS 落地不属于转发，不会在这里显示。"
 }
 
 add_ss_and_bind() {
@@ -82,6 +86,8 @@ data["outbounds"].append({
 new_rules = []
 for r in data["route"]["rules"]:
     inbound = r.get("inbound")
+    if isinstance(inbound, str) and inbound == inbound_tag:
+        continue
     if isinstance(inbound, list) and inbound_tag in inbound:
         inbound = [x for x in inbound if x != inbound_tag]
         if inbound:
@@ -139,6 +145,8 @@ data["outbounds"].append({
 new_rules = []
 for r in data["route"]["rules"]:
     inbound = r.get("inbound")
+    if isinstance(inbound, str) and inbound == inbound_tag:
+        continue
     if isinstance(inbound, list) and inbound_tag in inbound:
         inbound = [x for x in inbound if x != inbound_tag]
         if inbound:
@@ -196,6 +204,8 @@ data["route"].setdefault("rules", [])
 new_rules = []
 for r in data["route"]["rules"]:
     inbound = r.get("inbound")
+    if isinstance(inbound, str) and inbound == inbound_tag:
+        continue
     if isinstance(inbound, list) and inbound_tag in inbound:
         inbound = [x for x in inbound if x != inbound_tag]
         if inbound:
@@ -213,13 +223,21 @@ data["route"]["rules"] = new_rules
 p.write_text(json.dumps(data, indent=2, ensure_ascii=False))
 print(f"已绑定: {inbound_tag} -> {out_tag}")
 PY
+
+  echo
+  echo "绑定完成，正在自动检查配置并重启 sing-box..."
+  check_restart_save
 }
 
 remove_forward_for_node() {
-  backup
+  if ! backup; then
+    echo "主配置备份失败，已取消操作。" >&2
+    return 1
+  fi
 
-  python3 - "$CONFIG" "$SELECTED_TAG" <<'PY'
-import json, sys
+  if ! python3 - "$CONFIG" "$SELECTED_TAG" <<'PY'
+import json
+import sys
 from pathlib import Path
 
 config, inbound_tag = sys.argv[1:]
@@ -229,41 +247,69 @@ data = json.loads(p.read_text())
 
 rules = data.get("route", {}).get("rules", [])
 new_rules = []
+removed = 0
 
-for r in rules:
-    inbound = r.get("inbound")
+for rule in rules:
+    inbound = rule.get("inbound")
+    if isinstance(inbound, str) and inbound == inbound_tag:
+        removed += 1
+        continue
     if isinstance(inbound, list) and inbound_tag in inbound:
-        inbound = [x for x in inbound if x != inbound_tag]
+        removed += 1
+        inbound = [tag for tag in inbound if tag != inbound_tag]
         if inbound:
-            r["inbound"] = inbound
-            new_rules.append(r)
+            rule["inbound"] = inbound
+            new_rules.append(rule)
     else:
-        new_rules.append(r)
+        new_rules.append(rule)
+
+if removed == 0:
+    raise SystemExit(f"当前节点没有中转规则: {inbound_tag}")
 
 data.setdefault("route", {})
 data["route"]["rules"] = new_rules
-
 p.write_text(json.dumps(data, indent=2, ensure_ascii=False))
 print(f"已取消中转: {inbound_tag}")
+print("落地出站配置已保留，可稍后重新绑定。")
 PY
+  then
+    echo "取消节点中转失败，未重启 sing-box。" >&2
+    return 1
+  fi
+
+  echo
+  echo "中转已取消，正在自动检查配置并重启 sing-box..."
+  check_restart_save
 }
 
 show_node_forward() {
   jq -r --arg tag "$SELECTED_TAG" '
-    (.route.rules // [])
-    | .[]
-    | select(.inbound and (.inbound | index($tag)))
-    | "\($tag) -> \(.outbound)"
+    [
+      (.route.rules // [])[]
+      | select(.inbound != null and .outbound != null)
+      | select(
+          .inbound
+          | if type == "array" then index($tag) != null else . == $tag end
+        )
+    ] as $rules
+    | if ($rules | length) == 0 then
+        "当前节点没有中转规则。"
+      else
+        $rules[] | "\($tag) -> \(.outbound)"
+      end
   ' "$CONFIG"
 }
 
 delete_forward_menu() {
   mapfile -t RULES < <(
     jq -r '
-      (.route.rules // [])
-      | .[]
-      | select(.inbound and .outbound)
-      | "\(.inbound | join(","))        \(.outbound)"
+      (.route.rules // [])[]
+      | select(.inbound != null and .outbound != null)
+      | [
+          (.inbound | if type == "array" then join(",") else tostring end),
+          (.outbound | tostring)
+        ]
+      | @tsv
     ' "$CONFIG"
   )
 
@@ -275,7 +321,8 @@ delete_forward_menu() {
 
   echo "选择要删除的转发："
   for i in "${!RULES[@]}"; do
-    echo "$((i+1))) ${RULES[$i]}"
+    IFS=$'\t' read -r rule_inbound rule_outbound <<< "${RULES[$i]}"
+    echo "$((i+1))) $rule_inbound -> $rule_outbound"
   done
 
   echo
@@ -287,13 +334,17 @@ delete_forward_menu() {
     return
   fi
 
-  inbound=$(echo "${RULES[$((idx-1))]}" | cut -f1)
-  outbound=$(echo "${RULES[$((idx-1))]}" | cut -f2)
+  IFS=$'\t' read -r inbound outbound <<< "${RULES[$((idx-1))]}"
 
-  backup
+  if ! backup; then
+    echo "主配置备份失败，已取消删除。" >&2
+    read -rp "按回车继续..."
+    return 1
+  fi
 
-  python3 - "$CONFIG" "$inbound" "$outbound" <<'PY'
-import json, sys
+  if ! python3 - "$CONFIG" "$inbound" "$outbound" <<'PY'
+import json
+import sys
 from pathlib import Path
 
 config, inbound_str, outbound = sys.argv[1:]
@@ -302,18 +353,40 @@ inbounds = inbound_str.split(",")
 p = Path(config)
 data = json.loads(p.read_text())
 
+
+def normalize_inbounds(value):
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        return [value]
+    return []
+
+
 new_rules = []
-for r in data.get("route", {}).get("rules", []):
-    if r.get("inbound") == inbounds and r.get("outbound") == outbound:
+removed = 0
+for rule in data.get("route", {}).get("rules", []):
+    if normalize_inbounds(rule.get("inbound")) == inbounds and rule.get("outbound") == outbound:
+        removed += 1
         continue
-    new_rules.append(r)
+    new_rules.append(rule)
+
+if removed == 0:
+    raise SystemExit(f"未找到待删除的转发: {inbound_str} -> {outbound}")
 
 data.setdefault("route", {})
 data["route"]["rules"] = new_rules
-
 p.write_text(json.dumps(data, indent=2, ensure_ascii=False))
-print(f"已删除: {inbound_str} -> {outbound}")
+print(f"已删除转发: {inbound_str} -> {outbound}")
+print("落地出站配置已保留，可稍后重新绑定。")
 PY
+  then
+    echo "删除转发失败，未重启 sing-box。" >&2
+    read -rp "按回车继续..."
+    return 1
+  fi
 
+  echo
+  echo "转发已删除，正在自动检查配置并重启 sing-box..."
+  check_restart_save || true
   read -rp "按回车继续..."
 }

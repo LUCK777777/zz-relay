@@ -6,7 +6,7 @@ sync_nodes() {
     return 1
   fi
 
-  python3 - "$CONFIG" "$CONF_DIR" <<'PY'
+  if ! python3 - "$CONFIG" "$CONF_DIR" <<'PY'
 import json
 import os
 import sys
@@ -86,6 +86,14 @@ else:
     print("主配置未包含入口，无需清理。")
 print("节点继续由 /etc/sing-box/conf/*.json 加载，不会复制到主配置。")
 PY
+  then
+    echo "同步 233boy 节点失败，未重启 sing-box。" >&2
+    return 1
+  fi
+
+  echo
+  echo "节点同步完成，正在自动检查配置并重启 sing-box..."
+  check_restart_save
 }
 
 choose_vless() {
